@@ -4,116 +4,405 @@ description: 'Connect to Deepslate Realtime via WebSocket for server-side voice 
 icon: 'server'
 ---
 
-WebSocket is ideal for backend services, telephony integrations, and environments where you control the network.
+The WebSocket API provides low-level access to Deepslate Realtime for server-side integrations. Use this for telephony backends, SIP gateways, or custom voice pipelines.
 
-## Connection Endpoint
+<Warning>
+This interface is for **server-side use only**. End users should connect through WebRTC or your application's frontend. Never expose your API key to clients.
+</Warning>
 
+## Prerequisites
+
+- A Deepslate API key
+- Node.js 18+ with the `ws` and `protobufjs` packages
+- The [proto definition file](/api-reference/realtime.proto)
+
+```bash
+npm install ws protobufjs
 ```
-wss://app.phonebot.io/v1/realtime
-```
 
-## Authentication
+## Connect
 
-Include your API key in the connection headers:
+Connect to the WebSocket endpoint with your API key in the headers:
 
 ```javascript
+import WebSocket from 'ws';
+import protobuf from 'protobufjs';
+
 const ws = new WebSocket('wss://app.phonebot.io/v1/realtime', {
   headers: {
     'Authorization': 'Bearer YOUR_API_KEY'
   }
 });
-```
 
-## Message Format
-
-All messages are JSON-encoded with a `type` field:
-
-```json
-{
-  "type": "audio.input",
-  "data": "<base64-encoded-audio>"
-}
-```
-
-## Message Types
-
-<AccordionGroup>
-  <Accordion title="Client Messages" icon="arrow-up">
-    | Type | Description |
-    |------|-------------|
-    | `session.start` | Initialize a session with assistant/agent configuration |
-    | `audio.input` | Send audio data (base64 PCM or Opus) |
-    | `audio.end` | Signal end of user speech |
-    | `session.end` | Gracefully close the session |
-  </Accordion>
-
-  <Accordion title="Server Messages" icon="arrow-down">
-    | Type | Description |
-    |------|-------------|
-    | `session.ready` | Session initialized, ready for audio |
-    | `audio.output` | AI-generated speech audio |
-    | `transcript.partial` | Real-time partial transcription |
-    | `transcript.final` | Final transcription of utterance |
-    | `session.ended` | Session closed |
-    | `error` | Error details |
-  </Accordion>
-</AccordionGroup>
-
-## Example: Node.js Client
-
-```javascript
-import WebSocket from 'ws';
-
-const ws = new WebSocket('wss://app.phonebot.io/v1/realtime', {
-  headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
-});
+ws.binaryType = 'arraybuffer';
 
 ws.on('open', () => {
-  ws.send(JSON.stringify({
-    type: 'session.start',
-    assistant_id: 'asst_xxx'
-  }));
+  console.log('Connected');
+  // Initialize session immediately after connecting
 });
 
 ws.on('message', (data) => {
-  const msg = JSON.parse(data);
+  // Handle incoming protobuf messages
+});
 
-  if (msg.type === 'audio.output') {
-    // Play or forward the audio
-    playAudio(Buffer.from(msg.data, 'base64'));
+ws.on('close', (code, reason) => {
+  console.log(`Disconnected: ${code}`);
+});
+```
+
+## Initialize Session
+
+The first message must be an `InitializeSessionRequest` to configure audio format, VAD, and model behavior:
+
+```javascript
+// Load protobuf definitions
+const root = await protobuf.load('realtime.proto');
+const ServiceBoundMessage = root.lookupType('eu.deepslate.realtime.speeq.ServiceBoundMessage');
+const ClientBoundMessage = root.lookupType('eu.deepslate.realtime.speeq.ClientBoundMessage');
+
+// Build initialization message
+const initMessage = ServiceBoundMessage.create({
+  initializeSessionRequest: {
+    inputAudioLine: {
+      sampleRate: 16000,
+      channelCount: 1,
+      sampleFormat: 1  // SIGNED_16_BIT
+    },
+    outputAudioLine: {
+      sampleRate: 16000,
+      channelCount: 1,
+      sampleFormat: 1  // SIGNED_16_BIT
+    },
+    vadConfiguration: {
+      confidenceThreshold: 0.5,
+      minVolume: 0,
+      startDuration: { seconds: 0, nanos: 300000000 },  // 300ms
+      stopDuration: { seconds: 0, nanos: 700000000 },   // 700ms
+      backbufferDuration: { seconds: 1, nanos: 0 }      // 1s
+    },
+    inferenceConfiguration: {
+      systemPrompt: 'You are a helpful assistant.'
+    }
+  }
+});
+
+// Send as binary protobuf
+const buffer = ServiceBoundMessage.encode(initMessage).finish();
+ws.send(buffer);
+```
+
+<Tip>
+See the [API Reference](/api-reference/realtime) for all configuration options including TTS providers and tool definitions.
+</Tip>
+
+## Send Audio
+
+Stream audio as `UserInput` messages. Audio must match your `inputAudioLine` configuration:
+
+```javascript
+let packetId = 0;
+
+function sendAudio(pcmBuffer) {
+  const message = ServiceBoundMessage.create({
+    userInput: {
+      packetId: packetId++,
+      audioData: {
+        data: pcmBuffer  // Raw PCM bytes matching your config
+      }
+    }
+  });
+
+  const buffer = ServiceBoundMessage.encode(message).finish();
+  ws.send(buffer);
+}
+```
+
+<Note>
+Audio format must exactly match your session configuration. For 16-bit signed PCM at 16kHz mono, each sample is 2 bytes, little-endian.
+</Note>
+
+## Handle Responses
+
+The server sends `ClientBoundMessage` with one of several payload types:
+
+```javascript
+ws.on('message', (data) => {
+  const message = ClientBoundMessage.decode(new Uint8Array(data));
+
+  if (message.modelTextFragment) {
+    // Streamed text tokens (when TTS is not configured)
+    process.stdout.write(message.modelTextFragment.text);
+  }
+
+  if (message.modelAudioChunk) {
+    // TTS audio output
+    const audioData = message.modelAudioChunk.audio.data;
+    const transcript = message.modelAudioChunk.transcript;
+
+    // Queue audio for playback
+    playAudio(audioData);
+  }
+
+  if (message.playbackClearBuffer) {
+    // User interrupted - clear any buffered audio immediately
+    clearAudioQueue();
   }
 });
 ```
 
-## Audio Configuration
+## Handle Interruptions
+
+When the user starts speaking while audio is playing, the server sends `PlaybackClearBuffer`. You should immediately discard any queued audio that hasn't played yet:
+
+```javascript
+let audioQueue = [];
+
+function playAudio(data) {
+  audioQueue.push(data);
+  // Process queue...
+}
+
+function clearAudioQueue() {
+  audioQueue = [];
+  // Also stop any currently playing audio
+}
+```
+
+## Tool Calling
+
+Enable the model to call functions by defining tools and handling requests.
+
+### Define Tools
+
+Send an `UpdateToolDefinitionsRequest` to register available tools. Each tool needs a name, description, and JSON Schema parameters:
+
+```javascript
+function updateTools() {
+  const message = ServiceBoundMessage.create({
+    updateToolDefinitionsRequest: {
+      toolDefinitions: [
+        {
+          name: 'get_weather',
+          description: 'Get current weather for a location',
+          parameters: {
+            fields: {
+              location: {
+                kind: { stringValue: 'string' }
+              }
+            }
+          }
+        },
+        {
+          name: 'get_time',
+          description: 'Get the current time',
+          parameters: {}
+        }
+      ]
+    }
+  });
+
+  ws.send(ServiceBoundMessage.encode(message).finish());
+}
+```
 
 <Note>
-Deepslate uses 16kHz mono audio by default. Ensure your audio input matches this format for optimal performance.
+Calling `UpdateToolDefinitionsRequest` replaces all existing tools. Send an empty array to clear all tools.
 </Note>
 
-### Supported Formats
+### Handle Tool Requests
 
-| Format | Sample Rate | Channels | Use Case |
-|--------|-------------|----------|----------|
-| PCM 16-bit | 16000 Hz | Mono | Raw audio |
-| Opus | 16000 Hz | Mono | Compressed audio |
+When the model wants to use a tool, you receive a `ToolCallRequest`. You must respond with a `ToolCallResponse`:
 
-## Error Handling
+```javascript
+ws.on('message', (data) => {
+  const message = ClientBoundMessage.decode(new Uint8Array(data));
 
-<AccordionGroup>
-  <Accordion title="Connection Errors" icon="triangle-exclamation">
-    | Code | Description | Resolution |
-    |------|-------------|------------|
-    | `auth_failed` | Invalid or expired API key | Check your API key |
-    | `rate_limited` | Too many concurrent sessions | Reduce connection rate |
-    | `invalid_config` | Invalid assistant/agent ID | Verify resource exists |
-  </Accordion>
+  if (message.toolCallRequest) {
+    const { id, name, parameters } = message.toolCallRequest;
 
-  <Accordion title="Runtime Errors" icon="bug">
-    | Code | Description | Resolution |
-    |------|-------------|------------|
-    | `audio_format` | Unsupported audio format | Use PCM or Opus |
-    | `session_timeout` | Session idle too long | Send keepalive or reconnect |
-    | `internal_error` | Server-side error | Retry with backoff |
-  </Accordion>
-</AccordionGroup>
+    // Execute the tool
+    const result = executeToolCall(name, parameters);
+
+    // Send the response (required for every request)
+    const response = ServiceBoundMessage.create({
+      toolCallResponse: {
+        id: id,      // Must match the request ID
+        result: result
+      }
+    });
+    ws.send(ServiceBoundMessage.encode(response).finish());
+  }
+});
+
+function executeToolCall(name, parameters) {
+  switch (name) {
+    case 'get_weather':
+      const location = parameters?.fields?.location?.kind?.stringValue;
+      return JSON.stringify({ temperature: 22, condition: 'sunny', location });
+
+    case 'get_time':
+      return JSON.stringify({ time: new Date().toISOString() });
+
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+}
+```
+
+<Warning>
+Every `ToolCallRequest` **must** receive a `ToolCallResponse`, even if the tool execution fails. The model waits for the response before continuing.
+</Warning>
+
+## Complete Example
+
+A Node.js client with microphone input and speaker output:
+
+```bash
+npm install ws protobufjs audify
+```
+
+```javascript
+import WebSocket from 'ws';
+import protobuf from 'protobufjs';
+import pkg from 'audify';
+const { RtAudio, RtAudioFormat } = pkg;
+
+async function main() {
+  // Load protobuf types
+  const root = await protobuf.load('realtime.proto');
+  const ServiceBoundMessage = root.lookupType('eu.deepslate.realtime.speeq.ServiceBoundMessage');
+  const ClientBoundMessage = root.lookupType('eu.deepslate.realtime.speeq.ClientBoundMessage');
+
+  // Audio config
+  const SAMPLE_RATE = 16000;
+  const CHANNELS = 1;
+  const FRAME_SIZE = 1600; // 100ms of audio
+
+  // Set up audio I/O
+  const rtAudio = new RtAudio();
+
+  // State
+  let packetId = 0;
+  let playbackQueue = [];
+
+  // Connect
+  const ws = new WebSocket('wss://app.phonebot.io/v1/realtime', {
+    headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+  });
+  ws.binaryType = 'arraybuffer';
+
+  // Helper to send messages
+  function send(payload) {
+    const msg = ServiceBoundMessage.create(payload);
+    ws.send(ServiceBoundMessage.encode(msg).finish());
+  }
+
+  ws.on('open', () => {
+    // Initialize session
+    send({
+      initializeSessionRequest: {
+        inputAudioLine: { sampleRate: SAMPLE_RATE, channelCount: CHANNELS, sampleFormat: 1 },
+        outputAudioLine: { sampleRate: SAMPLE_RATE, channelCount: CHANNELS, sampleFormat: 1 },
+        vadConfiguration: {
+          confidenceThreshold: 0.5,
+          minVolume: 0,
+          startDuration: { seconds: 0, nanos: 300000000 },
+          stopDuration: { seconds: 0, nanos: 700000000 },
+          backbufferDuration: { seconds: 1, nanos: 0 }
+        },
+        inferenceConfiguration: {
+          systemPrompt: 'You are a friendly and helpful assistant.'
+        }
+      }
+    });
+
+    // Register tools
+    send({
+      updateToolDefinitionsRequest: {
+        toolDefinitions: [{
+          name: 'get_time',
+          description: 'Get the current time',
+          parameters: {}
+        }]
+      }
+    });
+
+    // Open microphone input
+    rtAudio.openStream(
+      null, // No output in this stream
+      { nChannels: CHANNELS },
+      RtAudioFormat.RTAUDIO_SINT16,
+      SAMPLE_RATE,
+      FRAME_SIZE,
+      'deepslate-input',
+      (pcm) => {
+        send({
+          userInput: {
+            packetId: packetId++,
+            audioData: { data: pcm }
+          }
+        });
+      }
+    );
+    rtAudio.start();
+
+    console.log('Listening... speak into your microphone');
+  });
+
+  ws.on('message', (data) => {
+    const msg = ClientBoundMessage.decode(new Uint8Array(data));
+
+    if (msg.modelTextFragment) {
+      process.stdout.write(msg.modelTextFragment.text);
+    }
+
+    if (msg.modelAudioChunk) {
+      // Queue audio for playback
+      playbackQueue.push(Buffer.from(msg.modelAudioChunk.audio.data));
+    }
+
+    if (msg.playbackClearBuffer) {
+      // Clear queued audio
+      playbackQueue = [];
+    }
+
+    if (msg.toolCallRequest) {
+      const { id, name, parameters } = msg.toolCallRequest;
+      console.log(`Tool call: ${name}`, parameters);
+      const result = handleTool(name, parameters);
+      console.log(`Tool result: ${result}`);
+      send({ toolCallResponse: { id, result } });
+    }
+  });
+
+  ws.on('close', (code) => {
+    rtAudio.stop();
+    rtAudio.closeStream();
+    console.log('Disconnected:', code);
+  });
+
+  ws.on('error', (err) => console.error('Error:', err));
+}
+
+function handleTool(name, parameters) {
+  switch (name) {
+    case 'get_time':
+      return JSON.stringify({ time: new Date().toLocaleTimeString() });
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+}
+
+main();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/api-reference/realtime">
+    Full message schemas, all configuration options, and tool calling
+  </Card>
+  <Card title="WebRTC" icon="browser" href="/webrtc">
+    Browser-based integration for end-user applications
+  </Card>
+</CardGroup>

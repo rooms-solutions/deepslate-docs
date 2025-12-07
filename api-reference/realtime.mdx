@@ -51,7 +51,7 @@ Messages sent from client to server, wrapped in `ServiceBoundMessage`.
         },
         "vadConfiguration": {
           "confidenceThreshold": 0.5,
-          "minVolume": 0.1,
+          "minVolume": 0,
           "startDuration": { "seconds": 0, "nanos": 200000000 },
           "stopDuration": { "seconds": 0, "nanos": 500000000 },
           "backbufferDuration": { "seconds": 1, "nanos": 0 }
@@ -149,7 +149,7 @@ Messages sent from client to server, wrapped in `ServiceBoundMessage`.
 Messages sent from server to client, wrapped in `ClientBoundMessage`.
 
 <AccordionGroup>
-  <Accordion title="AssistantTextFragment" icon="text" defaultOpen>
+  <Accordion title="ModelTextFragment" icon="text" defaultOpen>
     Streamed text output as tokens arrive. Used when TTS is not configured.
 
     | Field | Type | Description |
@@ -158,14 +158,14 @@ Messages sent from server to client, wrapped in `ClientBoundMessage`.
 
     ```json
     {
-      "assistantTextFragment": {
+      "modelTextFragment": {
         "text": "Hello, how can I help you?"
       }
     }
     ```
   </Accordion>
 
-  <Accordion title="AssistantAudioChunk" icon="volume-high">
+  <Accordion title="ModelAudioChunk" icon="volume-high">
     TTS audio output when a TTS provider is configured.
 
     | Field | Type | Description |
@@ -175,7 +175,7 @@ Messages sent from server to client, wrapped in `ClientBoundMessage`.
 
     ```json
     {
-      "assistantAudioChunk": {
+      "modelAudioChunk": {
         "audio": {
           "data": "<base64-encoded-pcm>"
         },
@@ -203,6 +203,18 @@ Messages sent from server to client, wrapped in `ClientBoundMessage`.
           "location": "Amsterdam"
         }
       }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="PlaybackClearBuffer" icon="stop">
+    Notification to clear the audio playback buffer. Sent when the user interrupts the model (e.g., starts speaking while audio is still playing).
+
+    When received, immediately discard any buffered audio that hasn't been played yet.
+
+    ```json
+    {
+      "playbackClearBuffer": {}
     }
     ```
   </Accordion>

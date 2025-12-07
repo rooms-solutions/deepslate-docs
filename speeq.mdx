@@ -33,7 +33,7 @@ Unlike traditional voice AI that chains separate ASR, LLM, and TTS components, S
 
 ```mermaid
 flowchart LR
-    A[Audio In] --> B[ASR]
+    A[Audio In] --> B[STT]
     B --> C[Text]
     C --> D[LLM]
     D --> E[Text]
@@ -55,7 +55,7 @@ Speeq supports two output modes depending on your use case:
         B --> C[Embedding]
         C --> D[LLM]
         D --> E[Embedding]
-        E --> F[Speech Synthesis]
+        E --> F[Speech Decoder]
         F --> G[Audio Out]
     ```
 

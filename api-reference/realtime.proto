@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/struct.proto";
 
-package rooms.solutions.corvidae.session;
+package eu.deepslate.realtime.speeq;
 
 /*
  * Enumeration of supported audio sample formats.
@@ -232,17 +232,17 @@ message ServiceBoundMessage {
 }
 
 /*
- * A fragment of text from the assistant, streamed as tokens arrive.
+ * A fragment of text from the model, streamed as tokens arrive.
  */
-message AssistantTextFragment {
+message ModelTextFragment {
   // The text content of this fragment.
   string text = 1;
 }
 
 /*
- * An audio chunk from the assistant (TTS output).
+ * An audio chunk from the model (TTS output).
  */
-message AssistantAudioChunk {
+message ModelAudioChunk {
   // The audio data
   AudioData audio = 1;
 
@@ -250,10 +250,20 @@ message AssistantAudioChunk {
   optional string transcript = 2;
 }
 
+/*
+ * Notification to clear the playback buffer.
+ *
+ * This is sent when the user interrupts the model (e.g., starts speaking
+ * while the model is still outputting audio). The client should immediately
+ * clear any buffered audio that hasn't been played yet.
+ */
+message PlaybackClearBuffer {}
+
 message ClientBoundMessage {
   oneof payload {
     ToolCallRequest tool_call_request = 1;
-    AssistantTextFragment assistant_text_fragment = 2;
-    AssistantAudioChunk assistant_audio_chunk = 3;
+    ModelTextFragment model_text_fragment = 2;
+    ModelAudioChunk model_audio_chunk = 3;
+    PlaybackClearBuffer playback_clear_buffer = 4;
   }
 }
