@@ -28,7 +28,7 @@ Connect to the WebSocket endpoint with your API key in the headers:
 import WebSocket from 'ws';
 import protobuf from 'protobufjs';
 
-const ws = new WebSocket('wss://app.phonebot.io/v1/realtime', {
+const ws = new WebSocket('wss://app.deepslate.eu/api/v1/vendors/{vendorId}/organizations/{organizationId}/realtime', {
   headers: {
     'Authorization': 'Bearer YOUR_API_KEY'
   }
@@ -286,7 +286,7 @@ async function main() {
   let playbackQueue = [];
 
   // Connect
-  const ws = new WebSocket('wss://app.phonebot.io/v1/realtime', {
+  const ws = new WebSocket('wss://app.deepslate.eu/api/v1/vendors/{vendorId}/organizations/{organizationId}/realtime', {
     headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
   });
   ws.binaryType = 'arraybuffer';

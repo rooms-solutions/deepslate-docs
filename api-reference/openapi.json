@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://app.phonebot.io:80",
+      "url": "https://app.deepslate.eu:80",
       "description": "Generated server url"
     }
   ],
