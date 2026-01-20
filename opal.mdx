@@ -1,12 +1,12 @@
 ---
-title: 'How Speeq Works'
+title: 'How Opal Works'
 description: 'Our end-to-end speech-to-speech AI model powering natural voice conversations'
 icon: 'waveform-lines'
 ---
 
-Speeq is Deepslate's proprietary end-to-end speech-to-speech (S2S) model. Unlike traditional voice AI systems that chain together separate components, Speeq processes audio input and generates audio output in a single unified model.
+Opal is Deepslate's proprietary end-to-end speech-to-speech (S2S) model. Unlike traditional voice AI systems that chain together separate components, Opal processes audio input and generates audio output in a single unified model.
 
-## What Makes Speeq Different
+## What Makes Opal Different
 
 <CardGroup cols={2}>
   <Card title="No ASR Pipeline" icon="bolt">
@@ -26,7 +26,7 @@ Speeq is Deepslate's proprietary end-to-end speech-to-speech (S2S) model. Unlike
 ## Core Architecture
 
 <Note>
-Unlike traditional voice AI that chains separate ASR, LLM, and TTS components, Speeq understands speech directly. This eliminates latency penalties and error propagation between stages.
+Unlike traditional voice AI that chains separate ASR, LLM, and TTS components, Opal understands speech directly. This eliminates latency penalties and error propagation between stages.
 </Note>
 
 ### Traditional Cascaded Approach
@@ -43,9 +43,9 @@ flowchart LR
 
 Each stage introduces latency. Transcription errors compound through the pipeline. Total response time is the sum of all components.
 
-### Speeq End-to-End Approach
+### Opal End-to-End Approach
 
-Speeq supports two output modes depending on your use case:
+Opal supports two output modes depending on your use case:
 
 <Tabs>
   <Tab title="Full Speech-to-Speech">
@@ -76,7 +76,7 @@ Speeq supports two output modes depending on your use case:
 
 ## Performance Comparison
 
-| Metric | Speeq | Traditional Cascade |
+| Metric | Opal | Traditional Cascade |
 |--------|-------|---------------------|
 | First byte latency | **Under 300ms** | 800-1500ms |
 | Turn-taking gap | **Natural** | Noticeable delay |
@@ -87,7 +87,7 @@ Speeq supports two output modes depending on your use case:
 
 <AccordionGroup>
   <Accordion title="High Intelligence & Instruction Following" icon="brain">
-    Speeq combines speech understanding with advanced reasoning:
+    Opal combines speech understanding with advanced reasoning:
 
     - **Complex instruction following** — Handles multi-step requests and nuanced instructions
     - **Context retention** — Maintains conversation context across long interactions
@@ -96,7 +96,7 @@ Speeq supports two output modes depending on your use case:
   </Accordion>
 
   <Accordion title="Voice Preservation & Custom Voices" icon="microphone">
-    Speeq maintains consistent voice characteristics throughout conversations or adopts custom voice profiles. This enables branded voice experiences that match your organization's identity.
+    Opal maintains consistent voice characteristics throughout conversations or adopts custom voice profiles. This enables branded voice experiences that match your organization's identity.
   </Accordion>
 
   <Accordion title="Emotion & Tone Awareness" icon="face-smile">
@@ -108,11 +108,11 @@ Speeq supports two output modes depending on your use case:
   </Accordion>
 
   <Accordion title="Multilingual Support" icon="globe">
-    Speeq supports multiple languages and accents, enabling global deployment without requiring separate models for each locale.
+    Opal supports multiple languages and accents, enabling global deployment without requiring separate models for each locale.
   </Accordion>
 
   <Accordion title="Streaming Inference" icon="wave-pulse">
-    Speeq supports streaming in both directions:
+    Opal supports streaming in both directions:
 
     - **Input streaming** — Begins processing before the speaker finishes
     - **Output streaming** — Starts speaking while still generating the response
@@ -123,7 +123,7 @@ Speeq supports two output modes depending on your use case:
 
 ## Integration with Deepslate Realtime
 
-Speeq powers both **Assistants** (inbound) and **Agents** (outbound) on the Deepslate platform. When you configure an assistant or agent, you're defining the behavior, knowledge, and goals — Speeq handles the real-time voice interaction.
+Opal powers both **Assistants** (inbound) and **Agents** (outbound) on the Deepslate platform. When you configure an assistant or agent, you're defining the behavior, knowledge, and goals — Opal handles the real-time voice interaction.
 
 <CardGroup cols={2}>
   <Card title="Assistants" icon="phone-volume" href="/concepts#assistants">
